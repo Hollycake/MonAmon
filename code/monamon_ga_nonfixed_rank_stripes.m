@@ -15,7 +15,7 @@
 %> Set{k}.H          --- logical matrix [num_EC, num_features]
 %> Set{k}.sigma      --- double  matrix [num_EC, num_features]
     
-function [Scores, Set, Hist, it_inds] = monamon_ga_nonfixed_rank_stripes(Train_d, Train_y, Test_d, options)
+function [Scores, Set, Hist, it_inds] = monamon_ga_nonfixed_rank_stripes(Train_d, Train_y, Test_d, Test_y, options)
 
   num_classes = length(unique(Train_y)); 
   
@@ -35,52 +35,112 @@ function [Scores, Set, Hist, it_inds] = monamon_ga_nonfixed_rank_stripes(Train_d
   Train_d = Train_d(train_inds,:);
   Train_y = Train_y(train_inds);
   
-  num_it = options.num_it;
-  Hist.Scores_test = zeros(size(Test_d,1),num_classes,num_it);
-  Hist.Scores_valid = zeros(size(Valid_d,1),num_classes,num_it);
-  Set = cell(1,num_it);
+  max_num_it = options.max_num_it;
   
-  if options.verbose
-    v_obj_ind = 1:length(Valid_y);
-    v_obj_ind_k1 = v_obj_ind(Valid_y == 1);
-    v_obj_ind_k2 = v_obj_ind(Valid_y == 2);
-    v_obj_ind_k3 = v_obj_ind(Valid_y == 3);
-    v_obj_ind_k4 = v_obj_ind(Valid_y == 4);
-    v_obj_ind_k5 = v_obj_ind(Valid_y == 5);
-  end
+%   Set = cell(1,num_it);
   
-  for it = 1:num_it
+%   if options.verbose
+%     v_obj_ind = 1:length(Valid_y);
+%     v_obj_ind_k1 = v_obj_ind(Valid_y == 1);
+%     v_obj_ind_k2 = v_obj_ind(Valid_y == 2);
+%     v_obj_ind_k3 = v_obj_ind(Valid_y == 3);
+%     v_obj_ind_k4 = v_obj_ind(Valid_y == 4);
+%     v_obj_ind_k5 = v_obj_ind(Valid_y == 5);
+%   end
+  
+  for it = 1:max_num_it
     [Hist.Scores_test(:,:,it), Hist.Scores_valid(:,:,it), Set{it}] = monamon_ga_nonfixed_rank_stripe_step(Train_d, Train_y, Valid_d, Valid_y, Test_d, options);
     Scores = sum(Hist.Scores_test(:,:,1:it),3) / it;
     Scores_valid = sum(Hist.Scores_valid(:,:,1:it),3) / it;
     
+    %% Compute margins
+    Hist.Margins_test(it) = Scores(Test_y) - max(Scores(setdiff(1:num_classes,Test_y)));
+    
+    Hist.Margins_val{it} = zeros(length(Valid_y),1);    
+    
+    val_start = 1;
+    for k = 1:num_classes
+       v_obj_ind_k = (Valid_y == k);       
+       Hist.Margins_val{it}(val_start:val_start+sum(v_obj_ind_k)-1) = Scores_valid(v_obj_ind_k,k) - max(Scores_valid(v_obj_ind_k,setdiff(1:num_classes,k)));
+       val_start = val_start + sum(v_obj_ind_k);              
+    end
+    
+    %% Show margins if verbose
     if options.verbose
       figure(it);
-      clf;        
-%       scatter(v_obj_ind_k1, Scores_valid(v_obj_ind_k1,1)-Scores_valid(v_obj_ind_k1,2),'o','r');
-      scatter(v_obj_ind_k1, Scores_valid(v_obj_ind_k1,1)-max(Scores_valid(v_obj_ind_k1,2:end),[],2),'o','r');
+      clf;    
+      subplot(2,1,1);
+      for k = 1:num_classes        
+        v_obj_ind_k = find(Valid_y == k);  
+        
+        switch k
+          case 1
+            marker = 'o';
+            color = 'r';
+          case 2
+            marker = '+';
+            color = 'b';
+          case 3
+            marker = '^';
+            color = 'g';
+          case 4
+            marker = 'x';
+            color = 'k';
+          case 5
+            marker = 'd';
+            color = 'c';
+        end
+                
+        hold on;
+        scatter(v_obj_ind_k, Hist.Margins_val{it}(v_obj_ind_k), marker, color);                  
+      end
+      
       hold on;
-%       scatter(v_obj_ind_k2, Scores_valid(v_obj_ind_k2,2)-Scores_valid(v_obj_ind_k2,1),'+','b');
-      scatter(v_obj_ind_k2, Scores_valid(v_obj_ind_k2,2)-max(Scores_valid(v_obj_ind_k2,[1,3:end]),[],2),'+','b');
+      plot([1,length(Valid_y)],[0 0], 'm-.'); 
+      
+      subplot(2,1,2);
+      switch Test_y
+        case 1
+          marker = 'o';
+          color = 'r';
+        case 2
+          marker = '+';
+          color = 'b';
+        case 3
+          marker = '^';
+          color = 'g';
+        case 4
+          marker = 'x';
+          color = 'k';
+        case 5
+          marker = 'd';
+          color = 'c';
+      end
+      plot(1:it, Hist.Margins_test, [color,'-',marker]); 
       hold on;
-      scatter(v_obj_ind_k3, Scores_valid(v_obj_ind_k3,3)-max(Scores_valid(v_obj_ind_k3,[1,2,4,5]),[],2),'^','g');
-      hold on;
-      scatter(v_obj_ind_k4, Scores_valid(v_obj_ind_k4,4)-max(Scores_valid(v_obj_ind_k4,[1:3,5]),[],2),'x','k');
-      hold on;
-      scatter(v_obj_ind_k5, Scores_valid(v_obj_ind_k5,5)-max(Scores_valid(v_obj_ind_k5,1:4),[],2),'d','c');
-      hold on;
-      plot([1,length(Valid_y)],[0 0], 'm-.');
+      plot([1,it],[0 0], 'm-.');
     end
     
-    if ~any(Scores_valid,2)
+    %% Check if we have denialls at first iteration
+    if (it == 1) && any(~any(Scores_valid,2))
       continue;
     end
-    
+          
+    %% Classify
     [~, val_prc] = classify(Scores_valid, Valid_y);
+    
+    %% Stop if 100% accuracy on valid sample
     if val_prc == 100
       break;
+    end    
+    
+    %%
+    if (it > 1) && all(Hist.Margins_val{it} - Hist.Margins_val{it-1} < options.epsilon)
+      break;
     end
+      
   end
+    
 end
 
 function [Scores_test, Scores_valid, Set] = monamon_ga_nonfixed_rank_stripe_step(Train_d, Train_y, Valid_d, Valid_y, Test_d, options)
@@ -172,107 +232,17 @@ function [Scores_test, Scores_valid, Set] = monamon_ga_nonfixed_rank_stripe_step
         inds_pool(j) = [];
       end
     end
-%     EC_set = construct_stripe_basis(EC_set_1rank.H(stripe_inds,:), EC_set_1rank.sigma(stripe_inds,:), options.max_rank); 
-%     %% Make bool matrix
-%     [BoolM, EC_set] = make_boolm_nfrank(K1, K2, EC_set);
-%     %disp(sum(any(BoolM,2)))
-% 
-%     obj2save = any(BoolM,2);
-%     obj2save_k1 = all(reshape(obj2save,size(K2,1),size(K1,1)),1);
-%     obj2save_k2 = all(reshape(obj2save,size(K2,1),size(K1,1)),2);
-%     part_save_k1 = sum(obj2save_k1)/size(K1,1);
-%     part_save_k2 = sum(obj2save_k2)/size(K2,1);
-% 
-%     if part_save_k1 > part_save_k2
-%       K1 = K1(obj2save_k1,:);
-%     else
-%       K2 = K2(obj2save_k2,:);
-%     end
-%     [BoolM, EC_set] = make_boolm_nfrank(K1, K2, EC_set);
-%     Set{k}.num2stripe = sum(stripe_inds);
 
     EC_set = construct_stripe_basis(EC_set_1rank.H(stripe_inds,:), EC_set_1rank.sigma(stripe_inds,:), options.max_rank);      
     %% Make bool matrix
     [BoolM, EC_set] = make_boolm_nfrank(K1, K2, EC_set);
 
     if ~all(any(BoolM,2))
-      a = 1;
+      disp('BoolM has not covered rows');
     end
     
     Set{k}.num2stripe = sum(stripe_inds);    
-    
-%     num_attempts = 3;
-%     for attempt = 1:num_attempts
-%       EC_set = construct_stripe_basis(EC_set_1rank.H(stripe_inds,:), EC_set_1rank.sigma(stripe_inds,:), options.max_rank);      
-%       %% Make bool matrix
-%       [BoolM, EC_set] = make_boolm_nfrank(K1, K2, EC_set);
-% 
-%       if all(any(BoolM,2))
-%         Set{k}.num2stripe = sum(stripe_inds);
-%         break
-%       end
-%       fprintf('Attempt %d of %d\n',attempt,num_attempts);
-%       if attempt == num_attempts
-%         obj2save = any(BoolM,2);
-%         obj2save_k1 = all(reshape(obj2save,size(K2,1),size(K1,1)),1);
-%         obj2save_k2 = all(reshape(obj2save,size(K2,1),size(K1,1)),2);
-%         part_save_k1 = sum(obj2save_k1)/size(K1,1);
-%         part_save_k2 = sum(obj2save_k2)/size(K2,1);
-% 
-%         if part_save_k1 > part_save_k2
-%           K1 = K1(obj2save_k1,:);
-%         else
-%           K2 = K2(obj2save_k2,:);
-%         end
-%         [BoolM, EC_set] = make_boolm_nfrank(K1, K2, EC_set);
-%         Set{k}.num2stripe = sum(stripe_inds);
-%       end
-%       
-%       if ~isempty(inds_pool)
-%         j = randi(length(inds_pool),1);
-%         stripe_inds(inds_pool(j)) = true;
-%         inds_pool(j) = [];
-%       end
-%     end
-
-%     while 1
-%       EC_set = construct_stripe_basis(EC_set_1rank.H(stripe_inds,:), EC_set_1rank.sigma(stripe_inds,:), options.max_rank);      
-%       %% Make bool matrix
-%       [BoolM, EC_set] = make_boolm_nfrank(K1, K2, EC_set);
-%       
-%       if isempty(BoolM)
-%           a = 1;
-%       end
-%       
-%       if all(any(BoolM,2))
-%         Set{k}.num2stripe = sum(stripe_inds);
-%         break
-%       end
-%       if isempty(inds_pool)
-%           a = 1;
-%       end
-%       
-%       j = randi(length(inds_pool),1);
-%       stripe_inds(inds_pool(j)) = true;
-%       inds_pool(j) = [];
-%     end
-    
-%     stripe_inds = sort(randperm(num_1rank, options.num2stripe));
-%       
-%     while 1
-%       EC_set = construct_stripe_basis(EC_set_1rank.H(stripe_inds,:), EC_set_1rank.sigma(stripe_inds,:), options.max_rank);
-%       
-%       %% Make bool matrix
-%       [BoolM, EC_set] = make_boolm_nfrank(K1, K2, EC_set);    
-%     
-%       if ~all(any(BoolM,2))          
-%         stripe_inds = unique([stripe_inds, randi(num_1rank,1)]);
-%         %fprintf('Iteration %d: there are null rows in bool matrix\n', counter);
-%       else
-%         break
-%       end      
-%     end
-      
+          
     %% Make [num_obj, num_ec] matrixes of B(H,\sigma)(S)
     Train_eq      = make_ECin_mat(K1, EC_set);
     Valid_K_eq    = make_ECin_mat(Valid_d(Valid_y == k,:), EC_set);

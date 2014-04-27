@@ -47,7 +47,8 @@ function res = LOOcv(filename, options)
     %% Set Train and Control sets        
     Train_d = X(setdiff(1:num_obj, obj2out),:);
     Train_y = y(setdiff(1:num_obj, obj2out));
-    Test_d  = X(obj2out,:);  
+    Test_d  = X(obj2out,:); 
+    Test_y  = y(obj2out);
            
     if used_algs(1)
       %% Test algorithm
@@ -233,7 +234,7 @@ function res = LOOcv(filename, options)
 %       options.num_it = 5;
 %       options.verbose = false;
       [res.mganfrs.Scores(obj2out,:), res.mganfrs.set{obj2out}, res.mganfrs.hist{obj2out}] = ...        
-          monamon_ga_nonfixed_rank_stripes(Train_d, Train_y, Test_d, options);        
+          monamon_ga_nonfixed_rank_stripes(Train_d, Train_y, Test_d, Test_y, options);        
       res.mganfrs.time(obj2out) = toc; 
     end
   end                
