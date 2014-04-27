@@ -35,3 +35,5 @@ manelis4_10s27_loo = LOOcv('../Data/All/manelis4.tab', options);
 
 disp('Hea_r_disc2.tab');
 Hea_r_3s27_loo = LOOcv('../Data/Discretized/Hea_r_disc2.tab', options);
+
+ech_r_5s10_loo = LOOcv('C:\Users\asus\Documents\MATLAB\Data\Discretized\ech_r_disc2.tab', options);
