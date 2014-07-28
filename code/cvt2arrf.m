@@ -1,7 +1,7 @@
 function cvt2arrf(list_file_name, list_numobj_file_name, data_dir)
 
-  listfile = fopen(list_file_name, 'r');
-  list_numobj_file = fopen(list_numobj_file_name, 'w+');
+  listfile = fopen([data_dir , '\', list_file_name], 'r');
+  list_numobj_file = fopen([data_dir , '\', list_numobj_file_name], 'w+');
   
   filename = fgetl(listfile);
 
